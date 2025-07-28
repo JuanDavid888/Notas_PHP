@@ -403,3 +403,390 @@ tree -la 3
 ```bash
 tree -L 3
 ```
+<br>
+
+# **Inyección de dependencias**
+
+## **¿Qué es?**
+
+La inyección de dependencias (Dependency Injection o DI) es un patrón de diseño que permite desacoplar componentes en un sistema, facilitando la gestión de dependencias entre objetos.
+
+En lugar de que una clase cree directamente sus dependencias, estas se inyectan desde el exterior, lo que mejora la modularidad, testabilidad y mantenimiento del código.
+
+## **¿Para qué se usa?**
+
+**Se usa principalmente para:**
+
+- Reducir el acoplamiento entre componentes.
+- Facilitar las pruebas unitarias (mocking).
+- Mejorar la escalabilidad y mantenimiento de aplicaciones grandes.
+- Aplicar principios SOLID, especialmente la Inversión de Dependencias (D).
+
+## **Casos de uso**
+
+- Frameworks web como Spring (Java), ASP.NET Core (C#), Angular (TypeScript).
+- Aplicaciones móviles (como Android con Dagger/Hilt o Koin).
+- Arquitecturas limpias (Clean Architecture, DDD, Hexagonal).
+- Sistemas donde se requiere facilidad para testing (pruebas unitarias con mocks/stubs).*
+
+## **Ventajas**
+
+- Bajo acoplamiento entre componentes.
+- Mayor facilidad para testear (mockear dependencias).
+- Reutilización de código más sencilla.
+- Facilita la implementación de principios SOLID.
+- Cambiar una implementación por otra sin modificar el código cliente.
+
+## **Desventajas**
+
+- Mayor complejidad inicial, especialmente para principiantes.
+- Puede generar configuraciones difíciles de rastrear, sobre todo en grandes aplicaciones.
+- Sobrecarga de configuración si se usa incorrectamente o en exceso.
+- Uso excesivo puede llevar a overengineering (*práctica de diseñar un producto o solución que es más complejo o robusto de lo necesario*)
+
+## **Tipos de inyección**
+
+- Por constructor (la más común y recomendada).
+- Por setter (menos segura, puede haber estados inválidos).
+- Por interfaz (menos común).
+
+## **Ejemplo simple de inyección de dependencias en PHP**
+
+Supongamos que tienes una clase que depende de otra, por ejemplo, un `Logger` y un `UserService` que usa ese logger:
+
+### **Sin inyección (acoplamiento fuerte)**
+
+```php
+class Logger {
+    public function log($mensaje) {
+        echo "[LOG]: $mensaje\n";
+    }
+}
+
+class UserService {
+    private $logger;
+
+    public function __construct() {
+        $this->logger = new Logger(); // ACOPLAMIENTO FUERTE
+    }
+
+    public function crearUsuario($nombre) {
+        $this->logger->log("Usuario '$nombre' creado.");
+    }
+}
+
+$servicio = new UserService();
+$servicio->crearUsuario("Carlos");
+```
+
+Aquí, `UserService` crea su propia dependencia, lo que viola la inversión de dependencias y dificulta testear o cambiar `Logger`.
+
+### **Con inyección de dependencias (acoplamiento débil)**
+
+```php
+class Logger {
+    public function log($mensaje) {
+        echo "[LOG]: $mensaje\n";
+    }
+}
+
+class UserService {
+    private $logger;
+
+    // Inyección por constructor
+    public function __construct(Logger $logger) {
+        $this->logger = $logger;
+    }
+
+    public function crearUsuario($nombre) {
+        $this->logger->log("Usuario '$nombre' creado.");
+    }
+}
+
+// Inyectamos la dependencia desde fuera
+$logger = new Logger();
+$servicio = new UserService($logger);
+$servicio->crearUsuario("Carlos");
+```
+
+Ahora `UserService` no sabe cómo se construye `Logger`, solo que necesita uno. Esto hace el código más modular, fácil de testear y de extender.
+
+<br>
+
+# **Archivos PDF con PHP**
+
+Para generar archivos PDF con PHP, lo más común es usar bibliotecas externas que simplifican el proceso. Las dos más populares son:
+
+## **TCPDF**
+
+Una de las bibliotecas más completas y sin necesidad de dependencias externas.
+
+### **Link**
+
+https://tcpdf.org/
+
+### **Ventajas:**
+
+- No requiere extensiones especiales de PHP.
+- Totalmente en PHP.
+- Soporta HTML, CSS, imágenes, tablas, UTF-8, etc.
+
+### **Instalación con composer**
+
+```bash
+composer require tecnickcom/tcpdf
+```
+
+### **Ejemplo: Con composer**
+
+```php
+require_once('vendor/autoload.php');
+
+$pdf = new TCPDF();
+$pdf->AddPage();
+$pdf->SetFont('helvetica', '', 12);
+$pdf->Write(0, '¡Hola, mundo en PDF con TCPDF!');
+$pdf->Output('ejemplo_tcpdf.pdf', 'I'); // 'I' = inline en navegador, 'D' = descargar
+```
+
+***Estructura:***
+
+```mathematica
+/mi-proyecto
+│
+├── index.php
+├── composer.json
+└── vendor/
+		├── autoload.php
+		└── tecnickcom/
+				└── tcpdf/
+```
+
+### **Ejemplo: Sin composer**
+
+```php
+require_once('tcpdf/tcpdf.php');
+
+$pdf = new TCPDF();
+$pdf->AddPage();
+$pdf->SetFont('helvetica', '', 12);
+$pdf->Write(0, '¡Hola, mundo desde TCPDF!');
+$pdf->Output('ejemplo.pdf', 'I'); // 'I' para mostrar en el navegador
+```
+
+***Estructura:***
+
+```mathematica
+/mi-proyecto
+│
+├── index.php
+└── tcpdf/
+		├── tcpdf.php
+		├── config/
+		└── fonts/
+```
+
+## **FPDF**
+
+Una librería más sencilla, muy ligera, ideal para casos simples.
+
+### **Link**
+
+http://www.fpdf.org/
+
+### **Ventajas:**
+
+- Fácil de aprender.
+- Muy liviana.
+- Ideal para PDFs simples y control absoluto del diseño.
+- Permite agregar texto, imágenes, tablas simples
+
+### **Insalación con composer**
+
+```bash
+composer require setasign/fpdf
+```
+
+### **Alternativas de composer**
+
+| Paquete              | Comando Composer                    | Comentario                              |
+| -------------------- | ----------------------------------- | --------------------------------------- |
+| **setasign/fpdf**    | `composer require setasign/fpdf`    | Oficial y mantenido por Setasign        |
+| **anouar/fpdf**      | `composer require anouar/fpdf`      | Alternativa con namespace `Anouar\Fpdf` |
+| **clegginabox/fpdf** | `composer require clegginabox/fpdf` | Otra variante básica                    |
+
+### **Ejemplo: Con composer**
+
+```php
+require 'vendor/autoload.php';
+
+use setasign\Fpdi\Fpdf\Fpdf; // Esto funciona para el paquete de FPDI que incluye FPDF
+// O directamente:
+use Fpdf\Fpdf; // Algunos paquetes lo exponen así, depende del paquete exacto
+
+$pdf = new Fpdf();
+$pdf->AddPage();
+$pdf->SetFont('Arial','B',16);
+$pdf->Cell(40,10,'¡Hola mundo desde FPDF con Composer!');
+$pdf->Output();
+```
+
+***Estructura***
+
+```mathematica
+mi-proyecto/
+├── index.php
+├── composer.json
+└── vendor/
+		├── autoload.php
+		└── setasign/
+			└── fpdf/
+			└── ...
+```
+
+### **Nota sobre FPDI**
+
+Si además necesitas importar o modificar PDFs existentes, puedes usar FPDI, que depende de FPDF y extiende sus funciones:
+
+```bash
+composer require setasign/fpdi
+```
+
+### **Ejemplo: Sin composer**
+
+```php
+require('fpdf.php');
+
+$pdf = new FPDF();
+$pdf->AddPage();
+$pdf->SetFont('Arial','B',16);
+$pdf->Cell(40,10,'¡Hola, mundo con FPDF!');
+$pdf->Output();
+```
+
+Para usarlo, descarga `fpdf.php` desde el sitio oficial y colócalo en tu proyecto.
+
+***Estructura***
+
+```mathematica
+mi-proyecto/
+├── index.php
+└── fpdf/
+		├── fpdf.php
+		└── font/
+```
+## **DomPDF**
+
+Convierte HTML y CSS a PDF. Muy útil si ya tienes tu contenido en HTML.
+
+### **Link**
+
+https://github.com/dompdf/dompdf/releases
+
+https://github.com/dompdf/dompdf
+
+Descarga el archivo `.zip` más reciente (por ejemplo: `dompdf_x.x.x.zip`)
+
+### **Ventajas**
+
+- Soporte para imágenes, fuentes y estilos externos.
+- Fácil de usar.
+- Ideal si ya tienes contenido en HTML.
+- Control de formato de página, puedes definir tamaño y orientación del papel (`A4`, `letter`, `landscape`, etc.).
+
+### **Instalación con composer**
+
+```bash
+composer require dompdf/dompdf
+```
+
+### **Ejemplo: Con composer**
+
+```php
+use Dompdf\Dompdf;
+
+require 'vendor/autoload.php';
+
+$dompdf = new Dompdf();
+$dompdf->loadHtml('<h1>Hola mundo en PDF con DomPDF</h1>');
+$dompdf->setPaper('A4', 'portrait');
+$dompdf->render();
+$dompdf->stream("documento.pdf", ["Attachment" => false]); // true para forzar descarga
+```
+
+***Estructura***
+
+```mathematica
+mi-proyecto/
+├── composer.json                ← Archivo de configuración de Composer
+├── composer.lock                ← Bloquea las versiones instaladas
+├── vendor/                      ← Carpeta de dependencias (incluye DomPDF)
+│   └── autoload.php             ← Autoload universal de Composer
+│   └── dompdf/
+│       └── dompdf/              ← Código fuente de DomPDF
+│           └── ...
+├── index.php                    ← Archivo principal PHP que genera el PDF
+└── templates/                   ← Carpeta para las plantillas HTML
+└── factura.html             ← Ejemplo de plantilla HTML para el PDF
+```
+
+### **Ejemplo: Sin composer**
+
+```php
+require_once 'dompdf/autoload.inc.php';
+
+use Dompdf\Dompdf;
+
+// Crear instancia
+$dompdf = new Dompdf();
+$dompdf->loadHtml('<h1>Hola desde DomPDF sin Composer</h1>');
+
+// Configurar tamaño y orientación
+$dompdf->setPaper('A4', 'portrait');
+
+// Renderizar PDF
+$dompdf->render();
+
+// Mostrar en el navegador
+$dompdf->stream("documento.pdf", ["Attachment" => false]);
+```
+
+***Estructura***
+
+```mathematica
+mi-proyecto/
+├── index.php
+└── dompdf/
+		├── autoload.inc.php
+		├── dompdf_config.inc.php
+		└── src/
+```
+## **Conversión manual**
+
+Sí, es posible generar archivos PDF en PHP sin usar bibliotecas externas, pero no es recomendable para la mayoría de los casos, porque:
+
+- El formato PDF es complejo (estructura binaria con encabezados específicos, objetos, compresión, fuentes, etc.).
+- Hacerlo manualmente requiere escribir el contenido del PDF byte por byte siguiendo la especificación del formato PDF (PDF 1.4, por ejemplo).
+- Es mucho más propenso a errores y no soporta fácilmente fuentes, imágenes, UTF-8, ni estilos complejos.
+
+```php
+header('Content-type: application/pdf');
+header('Content-Disposition: inline; filename="simple.pdf"');
+
+// PDF mínimo (PDF 1.1)
+echo "%PDF-1.1\n";
+echo "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
+echo "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
+echo "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << >> >>\nendobj\n";
+echo "4 0 obj\n<< /Length 44 >>\nstream\nBT /F1 24 Tf 100 100 Td (Hola PDF) Tj ET\nendstream\nendobj\n";
+echo "xref\n0 5\n0000000000 65535 f \n";
+echo "0000000010 00000 n \n0000000063 00000 n \n0000000114 00000 n \n0000000211 00000 n \n";
+echo "trailer\n<< /Root 1 0 R /Size 5 >>\nstartxref\n289\n%%EOF";
+```
+
+Esto genera un archivo PDF muy rudimentario con el texto "Hola PDF" en una posición fija.
+
+### **Conclusión**
+
+- Sí, se puede crear un PDF sin bibliotecas, pero solo en casos educativos o ultra simples.
+- Para cualquier cosa práctica (fuentes, estilos, tablas, imágenes, UTF-8, etc.), usar una librería como FPDF, TCPDF o DomPDF es muchísimo más eficiente y seguro.
