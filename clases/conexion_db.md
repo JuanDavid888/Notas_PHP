@@ -261,7 +261,7 @@ switch ($method) {
 
 ### **Forma #2**
 
-## **Ejemplo de Modeo**
+## **Ejemplo de Modelo**
 
 ```php
 <?php
@@ -279,7 +279,63 @@ class Camper extends Model
 }
 ```
 
-## **Ejemplo de reportitories**
+## **Ejemplo Modelo 2**
+
+```php
+<?php
+
+namespace App\domain\models;
+
+
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Coffee extends Model
+{
+    protected $table = 'caracteristicas_cafe';
+    protected $primaryKey = 'id';
+    public $timestamps = false;
+
+    protected $fillable = [
+        'granos_cafe_id',
+        'tiempo_crecimiento_id',
+        'region_id',
+        'sabor_id',
+        'altitud_optima',
+        'datos_cafe_id'
+    ];
+
+    // Relaciones
+
+    public function grano(): BelongsTo
+    {
+        return $this->belongsTo(Grain::class, 'granos_cafe_id');
+    }
+
+    public function tiempoCrecimiento(): BelongsTo
+    {
+        return $this->belongsTo(TimeGrowth::class, 'tiempo_crecimiento_id');
+    }
+
+    public function region(): BelongsTo
+    {
+        return $this->belongsTo(Region::class, 'region_id');
+    }
+
+    public function sabor(): BelongsTo
+    {
+        return $this->belongsTo(Flavor::class, 'sabor_id');
+    }
+
+    public function datosCafe(): BelongsTo
+    {
+        return $this->belongsTo(CoffeeData::class, 'datos_cafe_id');
+    }
+}
+```
+
+## **Ejemplo de repositories**
 
 ```php
 <?php
@@ -299,6 +355,31 @@ interface CamperRepositoryInterface {
     public function update(int $doc, array $data): bool;
 
     public function delete(int $doc): bool;
+}
+```
+
+# **Ejemplo de repositories 2**
+
+```php
+<?php
+
+namespace App\domain\repositories;
+
+use App\domain\models\Coffee;
+
+interface CoffeeRepositoryInterface {
+
+    public function getAll(): array;
+    
+    public function getByPropertie(string $propertie, mixed $value): array;
+
+    public function getAllByCharacteristic(string $characteristic):array;
+
+    public function deleteFromTableById(string $table, int $id): int;
+
+    public function create(array $data):array;
+
+    public function updateFromTableById(string $table, int $id, array $data): array;
 }
 ```
 
@@ -399,6 +480,203 @@ class CamperController
 }
 ```
 
+## **Ejemplo controllers 2**
+
+```php
+<?php
+
+namespace App\controllers;
+
+use App\domain\repositories\CoffeeRepositoryInterface;
+use App\usesCases\UpdateCoffee;
+use App\usesCases\CreateCoffee;
+use App\usesCases\DeleteFromTableById;
+use App\usesCases\GetAllCoffee;
+use App\usesCases\GetCoffeeByPropertie;
+use App\usesCases\GetAllByCharactheristic;
+use Exception;
+use Psr\Http\Message\ResponseInterface as Response;
+use Psr\Http\Message\ServerRequestInterface as Request;
+
+class CoffeeController
+{
+    public function __construct(private CoffeeRepositoryInterface $repo) {}
+
+    public function index(Request $request, Response $response): Response
+    {
+        $useCase = new GetAllCoffee($this->repo);
+        $coffee = $useCase->execute();
+
+        if(!$coffee) {
+            $response->getBody()->write(json_encode(["error" => "No hay datos registrados"]));
+            return $response->withStatus(404);
+        }
+        $response->getBody()->write(json_encode($coffee));
+
+        return $response;
+    }
+
+    public function getByPropertie(Request $request, Response $response): Response
+    {
+        $queryParams = $request->getQueryParams();
+        $propertie = $queryParams['propertie'] ?? null;
+        $value = $queryParams['value'] ?? null;
+
+        if (!$propertie || $value === null) {
+            $response->getBody()->write(json_encode([
+                "error" => "Faltan parámetros: 'propertie' y 'value' son requeridos"
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+
+        $useCase = new GetCoffeeByPropertie($this->repo);
+        $coffees = $useCase->execute($propertie, $value);
+
+        if (empty($coffees)) {
+            $response->getBody()->write(json_encode([
+                "error" => "No se encontró ningun cafe con esa propiedad"
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+
+        $response->getBody()->write(json_encode($coffees));
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    public function getByCharacteristic(Request $request, Response $response): Response
+    {
+        $queryParams = $request->getQueryParams();
+        $characteristic = $queryParams['characteristic'] ?? null;
+        $valueFilter = $queryParams['value'] ?? null;
+
+        if (!$characteristic) {
+            $response->getBody()->write(json_encode([
+                "error" => "Falta el parametro 'characteristic'"
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+
+        $useCase = new GetAllByCharactheristic($this->repo);
+        $data = $useCase->getAllByCharacteristic($characteristic);
+
+        // 🟨 Aplica filtro si viene 'value'
+        if ($valueFilter !== null) {
+            $data = array_filter($data, function ($item) use ($characteristic, $valueFilter) {
+                return isset($item[$characteristic]) && $item[$characteristic] == $valueFilter;
+            });
+            $data = array_values($data); // Reindexar
+        }
+
+        if (empty($data)) {
+            $response->getBody()->write(json_encode([
+                "error" => "No se encontraron resultados con esa caracteristica/valor"
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+
+        $response->getBody()->write(json_encode($data));
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    public function deleteFromTable(Request $request, Response $response): Response
+    {
+        $params = $request->getQueryParams();
+        $table = $params['table'] ?? null;
+        $id = $params['id'] ?? null;
+
+        if (!$table || !$id || !is_numeric($id)) {
+            $response->getBody()->write(json_encode([
+                "error" => "Parametros requeridos: 'table' y 'id'"
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+
+        try {
+            $useCase = new \App\usesCases\DeleteFromTableById($this->repo);
+            $deleted = $useCase->execute($table, (int)$id);
+
+            if ($deleted === 0) {
+                $response->getBody()->write(json_encode([
+                    "message" => "No se encontro el registro en '$table' con ID $id"
+                ]));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+
+            $response->getBody()->write(json_encode([
+                "message" => "Registro eliminado de '$table' con ID $id"
+            ]));
+            return $response->withHeader('Content-Type', 'application/json');
+
+        } catch (\InvalidArgumentException $e) {
+            $response->getBody()->write(json_encode([
+                "error" => $e->getMessage()
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        } catch (\Exception $e) {
+            $response->getBody()->write(json_encode([
+                "error" => "Error al eliminar: " . $e->getMessage()
+            ]));
+            return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+        }
+    }
+
+    public function create(Request $request, Response $response): Response
+    {
+        $data = $request->getParsedBody();
+
+        if(!$data| !is_array($data)) {
+            $response->getBody()->write(json_encode([
+                "error" => "Datos invalidos o faltantes en la solicitud"
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+
+        try {
+            $useCase = new CreateCoffee($this->repo);
+            $coffee = $useCase->execute($data);
+
+            $response->getBody()->write(json_encode([
+                "message" => "Datos insertados correctamente",
+                "data" => $coffee
+            ]));
+
+            return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
+            
+        } catch (Exception $e) {
+            $response->getBody()->write(json_encode([
+                "error" => "Error al crear: " . $e->getMessage()
+            ]));
+            return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+        }
+    }
+
+    public function updateFromTable(Request $request, Response $response, array $args): Response
+    {
+        $table = $args['table'];
+        $id = (int)$args['id'];
+        $data = $request->getParsedBody();
+
+        try {
+            $useCase = new \App\usesCases\UpdateCoffee($this->repo);
+            $updated = $useCase->execute($table, $id, $data);
+
+            $response->getBody()->write(json_encode([
+                'message' => "Registro actualizado correctamente",
+                'data' => $updated
+            ]));
+
+            return $response->withHeader('Content-Type', 'application/json');
+        } catch (\InvalidArgumentException $e) {
+            $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        } catch (\Exception $e) {
+            $response->getBody()->write(json_encode(['error' => "Error al actualizar: " . $e->getMessage()]));
+            return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+        }
+    }
+}
+```
+
 ## **Ejemplo del CRUD**
 
 ```php
@@ -457,6 +735,305 @@ class EloquentCamperRepository implements CamperRepositoryInterface
         // DELETE FROM campers WHERE id = $doc;
         return $camper ? $camper->delete() : false;
     }
+}
+```
+
+## **Ejemplo del CRUD 2**
+
+```php
+<?php
+
+namespace App\infraestructure\repositories;
+
+use App\domain\models\Coffee;
+use App\domain\models\Flavor;
+use App\domain\models\Grain;
+use App\domain\models\Plant;
+use App\domain\models\TimeGrowth;
+use App\domain\models\Region;
+use App\domain\models\CoffeeData;
+use App\domain\repositories\CoffeeRepositoryInterface;
+use Illuminate\Database\Capsule\Manager as Capsule;
+
+class EloquentCoffeeRepository implements CoffeeRepositoryInterface
+{
+
+    public function getAll(): array
+    {
+        $coffees = Coffee::with(['grano.planta', 'tiempoCrecimiento', 'region.pais', 'sabor', 'datosCafe'])->get();
+    
+        $result = [];
+    
+        foreach ($coffees as $coffee) {
+            // Limpio los ids de grano
+            $grano = $coffee->grano->toArray();
+            unset($grano['id'], $grano['planta_id']);
+    
+            // Limpio los ids de planta dentro de grano
+            if (isset($grano['planta'])) {
+                unset($grano['planta']['id']);
+            }
+    
+            // Limpio los ids de tiempo_crecimiento
+            $tiempoCrecimiento = $coffee->tiempoCrecimiento->toArray();
+            unset($tiempoCrecimiento['id']);
+    
+            // Limpio ids de datos_cafe
+            $datosCafe = $coffee->datosCafe->toArray();
+            unset($datosCafe['id']);
+    
+            // No necesitas limpiar region y sabor si sólo usas nombre/característica
+            $result[] = [
+                'id' => $coffee->id,  // solo el id principal, no en anidados
+                'grano' => $grano,
+                'tiempo_crecimiento' => $tiempoCrecimiento,
+                'region' => $coffee->region->nombre,
+                'sabor' => $coffee->sabor->caracteristica,
+                'altitud_optima' => $coffee->altitud_optima,
+                'datos_cafe' => $datosCafe,
+            ];
+        }
+    
+        return $result;
+    }
+    
+    public function getByPropertie(string $propertie, mixed $value): array
+    {
+        $coffees = Coffee::with([
+            'grano.planta',
+            'tiempoCrecimiento',
+            'region.pais',
+            'sabor',
+            'datosCafe'
+        ])->where($propertie, $value)->get();
+
+        $result = [];
+
+        foreach ($coffees as $coffee) {
+            // Limpio los ids de grano
+            $grano = $coffee->grano->toArray();
+            unset($grano['id'], $grano['planta_id']);
+
+            // Limpio los ids de planta dentro de grano
+            if (isset($grano['planta'])) {
+                unset($grano['planta']['id']);
+            }
+
+            // Limpio los ids de tiempo_crecimiento
+            $tiempoCrecimiento = $coffee->tiempoCrecimiento->toArray();
+            unset($tiempoCrecimiento['id']);
+
+            // Limpio ids de datos_cafe
+            $datosCafe = $coffee->datosCafe->toArray();
+            unset($datosCafe['id']);
+
+            $result[] = [
+                'id' => $coffee->id,
+                'grano' => $grano,
+                'tiempo_crecimiento' => $tiempoCrecimiento,
+                'region' => $coffee->region->nombre,
+                'sabor' => $coffee->sabor->caracteristica,
+                'altitud_optima' => $coffee->altitud_optima,
+                'datos_cafe' => $datosCafe,
+            ];
+        }
+
+        return $result;
+    }
+
+    public function getAllByCharacteristic(string $characteristic): array
+    {
+        $coffees = Coffee::with([
+            'grano.planta',
+            'tiempoCrecimiento',
+            'region.pais',
+            'sabor',
+            'datosCafe'
+        ])->get();
+
+        $result = [];
+
+        foreach ($coffees as $coffee) {
+            $nombreVariedad = $coffee->grano->planta->nombre_variedad ?? null;
+
+            $value = match ($characteristic) {
+                // 🟫 PLANTA
+                'nombre_variedad' => $coffee->grano->planta->nombre_variedad ?? null,
+                'especie' => $coffee->grano->planta->especie ?? null,
+                'nombre_comun' => $coffee->grano->planta->nombre_comun ?? null,
+                'color_hoja' => $coffee->grano->planta->color_hoja ?? null,
+                'tamano_planta_cm' => $coffee->grano->planta->tamano_planta_cm ?? null,
+                'descripcion' => $coffee->grano->planta->descripcion ?? null,
+                'porte' => match (true) {
+                    ($coffee->grano->planta->tamano_planta_cm ?? 0) > 450 => 'Alto',
+                    ($coffee->grano->planta->tamano_planta_cm ?? 0) >= 350 => 'Medio Largo',
+                    ($coffee->grano->planta->tamano_planta_cm ?? 0) >= 200 => 'Medio Corto',
+                    ($coffee->grano->planta->tamano_planta_cm ?? 0) >= 100 => 'Medio',
+                    ($coffee->grano->planta->tamano_planta_cm ?? 0) > 0 => 'Bajo',
+                    default => null
+                },
+
+                // 🟤 GRANO
+                'tamano_grano_mm' => $coffee->grano->tamano_grano_mm ?? null,
+                'color_grano' => $coffee->grano->color_grano ?? null,
+                'forma_grano' => $coffee->grano->forma_grano ?? null,
+                'calidad' => $coffee->grano->calidad ?? null,
+                'tamano_grano' => match (true) {
+                    $coffee->grano->tamano_grano_mm < 6.0 => 'Pequeño',
+                    $coffee->grano->tamano_grano_mm >= 6.75 => 'Grande',
+                    default => 'Mediano',
+                },
+
+                // 🟠 TIEMPO CRECIMIENTO
+                'desde_anhos' => $coffee->tiempoCrecimiento->Desde_anhos ?? null,
+                'hasta_anhos' => $coffee->tiempoCrecimiento->Hasta_anhos ?? null,
+
+                // 🟡 REGION
+                'region' => $coffee->region->nombre ?? null,
+                'clima' => $coffee->region->clima ?? null,
+                'suelo' => $coffee->region->suelo ?? null,
+
+                // 🟢 PAIS
+                'pais' => $coffee->region->pais->nombre ?? null,
+
+                // 🔵 SABOR
+                'sabor' => $coffee->sabor->caracteristica ?? null,
+
+                // 🟣 DATOS CAFE
+                'altitud_optima' => $coffee->altitud_optima ?? null,
+                'requerimiento_nutricion' => $coffee->datosCafe->requerimiento_nutricion ?? null,
+                'densidad_plantacion' => $coffee->datosCafe->densidad_plantacion ?? null,
+                'resistencia' => $coffee->datosCafe->resistencia ?? null,
+                'primera_siembra' => $coffee->datosCafe->primera_siembra ?? null,
+
+                default => null,
+            };
+
+            if ($value !== null && $nombreVariedad !== null) {
+                $result[] = [
+                    'nombre_variedad' => $nombreVariedad,
+                    $characteristic => $value,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    public function deleteFromTableById(string $table, int $id): int
+    {
+        // Tabla segura con su modelo asociado
+        $allowedTables = [
+            'sabor' => Flavor::class,
+            'region' => Region::class,
+            'planta' => Plant::class,
+            'grano' => Grain::class,
+            'tiempo_crecimiento' => TimeGrowth::class,
+            'datos_cafe' => CoffeeData::class,
+            // Agrega mas si las necesitas
+        ];
+
+        if (!array_key_exists($table, $allowedTables)) {
+            throw new \InvalidArgumentException("Tabla '$table' no permitida para eliminación.");
+        }
+
+        $model = $allowedTables[$table];
+
+        // Encuentra y elimina
+        $record = $model::find($id);
+        if (!$record) {
+            return 0;
+        }
+
+        $record->delete();
+        return 1;
+    }
+
+    public function create(array $data): array
+    {
+        return Capsule::connection()->transaction(function () use ($data) {
+            // 1. Crear o encontrar planta
+            $plant = Plant::firstOrCreate(
+                ['nombre_variedad' => $data['plant']['nombre_variedad']],
+                $data['plant']
+            );
+
+            // 2. Crear grano
+            $grain = new Grain($data['grain']);
+            $grain->planta_id = $plant->id;
+            $grain->save();
+
+            // 3. Tiempo crecimiento
+            $growth = TimeGrowth::create($data['time_growth']);
+
+            // 4. Sabor
+            $flavor = Flavor::firstOrCreate(
+                ['caracteristica' => $data['flavor']]
+            );
+
+            // 5. Región
+            $region = Region::firstOrCreate(
+                ['nombre' => $data['region']['nombre']],
+                $data['region']
+            );
+
+            // 6. Datos de cafe
+            $coffeeData = CoffeeData::create($data['coffee_data']);
+
+            // 7. Crear cafe principal
+            $coffee = new Coffee([
+                'granos_cafe_id' => $grain->id,
+                'tiempo_crecimiento_id' => $growth->id,
+                'region_id' => $region->id,
+                'sabor_id' => $flavor->id,
+                'altitud_optima' => $data['altitud_optima'],
+                'datos_cafe_id' => $coffeeData->id,
+            ]);
+
+            $coffee->save();
+
+            return $coffee->load([
+                'grano.planta',
+                'tiempoCrecimiento',
+                'region.pais',
+                'sabor',
+                'datosCafe'
+            ])->toArray();
+        });
+    }
+
+    public function updateFromTableById(string $table, int $id, array $data): array
+    {
+        // Lista de tablas permitidas con su modelo asociado
+        $allowedTables = [
+            'planta' => Plant::class,
+            'grano' => Grain::class,
+            'tiempo_crecimiento' => TimeGrowth::class,
+            'region' => Region::class,
+            'sabor' => Flavor::class,
+            'datos_cafe' => CoffeeData::class,
+            'cafe' => Coffee::class,
+        ];
+
+        if (!array_key_exists($table, $allowedTables)) {
+            throw new \InvalidArgumentException("Tabla '$table' no permitida para actualización.");
+        }
+
+        $model = $allowedTables[$table];
+
+        // Buscar el registro
+        $record = $model::find($id);
+        if (!$record) {
+            throw new \Exception("No se encontró el registro en '$table' con ID $id.");
+        }
+
+        // Actualizar los campos
+        $record->update($data);
+
+        // Devolver el registro actualizado
+        return $record->fresh()->toArray();
+    }
+
 }
 ```
 
